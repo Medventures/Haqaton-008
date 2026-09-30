@@ -174,6 +174,10 @@ export default function App() {
 
   const docFields = template?.fields.filter((f) => f.type !== "checkbox") ?? [];
 
+  // текущий этап для полосы прогресса
+  const drafted = missing.length > 0 || references.length > 0 || Boolean(values.complaints);
+  const stage = sent ? 4 : drafted ? 2 : turns.length ? 1 : 0;
+
   // Сохранение документа в файл: HTML с расширением .doc открывается в Word
   const saveDocument = () => {
     if (!template) return;
@@ -206,21 +210,52 @@ export default function App() {
     <>
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark">✚</div>
-          <span>ИИ-ассистент консультации</span>
+          <img src="/aibolit-mark-128.png" alt="AiBolit" width={46} height={46} />
+          <div>
+            <strong>AiBolit Consult</strong>
+            <span>AI-ассистент врача</span>
+          </div>
         </div>
-        <div className="topbar-right">
-          <span><span className={`dot ${backend === "ok" ? "ok" : backend === "down" ? "bad" : ""}`} />сервер {backend === "ok" ? "на связи" : backend === "down" ? "недоступен" : "…"}</span>
-          {doctor && <span>🩺 {doctor.name} · тестовый профиль</span>}
+        <div className="topbar-badges">
+          <span className="pill secure">🔒 Синтетические данные</span>
+          <span className="pill proto">Протоколы МЗ РК</span>
+          <span className="pill proto">
+            <span className={`dot ${backend === "ok" ? "ok" : backend === "down" ? "bad" : ""}`} />
+            сервер {backend === "ok" ? "на связи" : backend === "down" ? "недоступен" : "…"}
+          </span>
         </div>
+        {doctor && (
+          <div className="doctor-chip">
+            <div className="avatar">{doctor.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}</div>
+            <div>
+              <strong>{doctor.name}</strong>
+              <span>тестовый профиль</span>
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="page">
+        <section className="hero-strip">
+          <div>
+            <div className="eyebrow">Безопасный AI-ассистент врача</div>
+            <h1>Консультация</h1>
+            <p>Запись разговора → анамнез → документ → МИС. Диагноз и лечение подтверждает только врач.</p>
+          </div>
+          <div className="workflow">
+            {["Запись", "Анамнез", "Документ", "МИС"].map((name, i) => (
+              <div key={name} className={`workflow-step${i === stage ? " active" : i < stage ? " done" : ""}`}>
+                <span>{i + 1}</span>
+                {name}
+              </div>
+            ))}
+          </div>
+        </section>
         <div className="grid">
           {/* ---------- левая колонка: приём и запись ---------- */}
           <div className="col">
             <section className="card">
-              <div className="card-head"><span className="step">1</span><h2>Пациент и приём</h2></div>
+              <div className="card-head"><div><span className="step-kicker">ШАГ 1</span><h2>Пациент и приём</h2></div></div>
               <label className="lbl" htmlFor="apt">Приём</label>
               <select id="apt" value={appointmentId} onChange={(e) => setAppointmentId(e.target.value)} style={{ width: "100%" }}>
                 <option value="">— выберите пациента —</option>
@@ -240,7 +275,7 @@ export default function App() {
 
             <section className="card">
               <div className="card-head">
-                <span className="step">2</span><h2>Запись консультации</h2>
+                <div><span className="step-kicker">ШАГ 2</span><h2>Запись консультации</h2></div>
                 <span className="hint">роли врач / пациент — автоматически</span>
               </div>
               <Dialogue turns={turns} onChange={setTurns} onReady={(t) => draft(t)} backendUrl={BACKEND_URL} />
@@ -295,7 +330,7 @@ export default function App() {
           <div className="col">
             <section className="card">
               <div className="card-head">
-                <span className="step">3</span><h2>Анамнез и форма осмотра</h2>
+                <div><span className="step-kicker">ШАГ 3</span><h2>Анамнез и форма осмотра</h2></div>
                 <span className="hint">{template?.title}</span>
               </div>
               {!template && <div className="muted">Загрузка шаблона…</div>}
@@ -324,7 +359,7 @@ export default function App() {
         <div className="grid" style={{ marginTop: 20 }}>
           <section className="card">
             <div className="card-head">
-              <span className="step">4</span><h2>Документ консультации</h2>
+              <div><span className="step-kicker">ШАГ 4</span><h2>Документ консультации</h2></div>
               <span className="row" style={{ marginLeft: "auto" }}>
                 <button type="button" className="btn" onClick={saveDocument} disabled={!template}>💾 Сохранить документ</button>
                 <button type="button" className="btn" onClick={() => window.print()}>🖨 Печать / PDF</button>
@@ -355,7 +390,7 @@ export default function App() {
 
           <div className="col">
           <section className="card">
-            <div className="card-head"><span className="step">5</span><h2>Отправка в МИС</h2></div>
+            <div className="card-head"><div><span className="step-kicker">ШАГ 5</span><h2>Отправка в МИС</h2></div></div>
             <p className="muted" style={{ marginTop: 0 }}>
               В МИС уйдёт то же, что вы видите: запись диалога врач—пациент и подписанный документ. Карточка ниже заполнится сама.
             </p>
@@ -392,7 +427,7 @@ export default function App() {
 
           <section className="card">
             <div className="card-head">
-              <span className="step wide">МИС</span><h2>Карточка пациента в МИС</h2>
+              <div><span className="step-kicker">ВНЕШНЯЯ СИСТЕМА</span><h2>Карточка пациента в МИС</h2></div>
               <a className="hint" href={appointmentId ? `${MIS_URL}/?apt=${appointmentId}` : MIS_URL} target="_blank" rel="noreferrer">
                 открыть в отдельном окне ↗
               </a>

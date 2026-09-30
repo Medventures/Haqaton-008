@@ -20,6 +20,8 @@ const SAMPLE: Turn[] = [
   { speaker: "doctor", text: "Острота зрения справа 0,4, слева 0,2. Внутриглазное давление справа 16, слева 17. Хрусталик мутный с обеих сторон, больше слева." },
 ];
 
+const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
 const SR: any = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
 
 type Props = {
@@ -38,6 +40,14 @@ export default function Dialogue({ turns, onChange, onReady, backendUrl }: Props
   const [interim, setInterim] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const [error, setError] = useState("");
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!recording) return;
+    setSeconds(0);
+    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [recording]);
 
   const recRef = useRef<any>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
@@ -162,32 +172,39 @@ export default function Dialogue({ turns, onChange, onReady, backendUrl }: Props
 
   return (
     <div>
-      <div className="row">
-        {!recording ? (
-          <button type="button" className="btn btn-rec btn-lg" onClick={start} disabled={labeling}>🎙 Начать запись</button>
-        ) : (
-          <button type="button" className="btn btn-stop btn-lg" onClick={stop}>⏹ Остановить и обработать</button>
-        )}
-        <select value={lang} onChange={(e) => setLang(e.target.value)} disabled={busy}>
-          <option value="ru-RU">Русский</option>
-          <option value="kk-KZ">Қазақша</option>
-        </select>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => { setError(""); setAudioUrl(""); onChange(SAMPLE); onReady(SAMPLE); }}
-          disabled={busy}
-        >
-          Загрузить пример
-        </button>
-        {turns.length > 0 && !busy && (
-          <button type="button" className="btn" onClick={() => { onChange([]); setAudioUrl(""); setError(""); }}>Очистить</button>
-        )}
+      <div className={`recorder${recording ? " recording" : ""}`}>
+        <div className="waveform">
+          {Array.from({ length: 28 }, (_, i) => <i key={i} />)}
+        </div>
+        <div className="record-time">{fmt(seconds)}</div>
+        <p>
+          {recording
+            ? "Идёт запись. Говорите как обычно — роли врач/пациент определятся автоматически после остановки."
+            : "Нажмите «Начать запись»: ИИ расставит роли, соберёт анамнез и подготовит документ."}
+        </p>
+        <div className="row">
+          {!recording ? (
+            <button type="button" className="btn btn-rec btn-lg" onClick={start} disabled={labeling}>🎙 Начать запись</button>
+          ) : (
+            <button type="button" className="btn btn-stop btn-lg" onClick={stop}>⏹ Остановить и обработать</button>
+          )}
+          <select value={lang} onChange={(e) => setLang(e.target.value)} disabled={busy}>
+            <option value="ru-RU">Русский</option>
+            <option value="kk-KZ">Қазақша</option>
+          </select>
+          <button
+            type="button"
+            className="btn btn-soft"
+            onClick={() => { setError(""); setAudioUrl(""); onChange(SAMPLE); onReady(SAMPLE); }}
+            disabled={busy}
+          >
+            Загрузить пример
+          </button>
+          {turns.length > 0 && !busy && (
+            <button type="button" className="btn" onClick={() => { onChange([]); setAudioUrl(""); setError(""); }}>Очистить</button>
+          )}
+        </div>
       </div>
-
-      {recording && (
-        <div className="busy"><span className="rec-dot" /> Идёт запись — говорите как обычно, роли определятся автоматически после остановки</div>
-      )}
       {labeling && <div className="busy"><span className="spinner" /> ИИ определяет, кто говорит — врач или пациент…</div>}
       {error && <div className="err">{error}</div>}
 
