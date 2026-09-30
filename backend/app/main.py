@@ -32,6 +32,27 @@ TEST_DOCTOR = {
 class Submission(BaseModel):
     template_id: str
     data: dict
+    appointment_id: str | None = None
+    transcript: str = ""
+
+
+def mis_request(method: str, path: str, body: dict | None = None):
+    req = urllib.request.Request(
+        f"{MIS_URL}{path}",
+        data=json.dumps(body).encode("utf-8") if body is not None else None,
+        headers={"Content-Type": "application/json"},
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read())
+    except (urllib.error.URLError, TimeoutError):
+        raise HTTPException(status_code=502, detail="МИС недоступна")
+
+
+@app.get("/api/appointments")
+def appointments():
+    return mis_request("GET", "/api/appointments")
 
 
 @app.get("/health")
@@ -70,15 +91,13 @@ def submit_to_mis(submission: Submission):
 
     allowed = {f["name"] for f in template["fields"]}
     payload = {k: v for k, v in submission.data.items() if k in allowed}
-    body = json.dumps({"template_id": template["id"], "data": payload}).encode("utf-8")
-    req = urllib.request.Request(
-        f"{MIS_URL}/api/consultations",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+    return mis_request(
+        "POST",
+        "/api/consultations",
+        {
+            "template_id": template["id"],
+            "appointment_id": submission.appointment_id,
+            "transcript": submission.transcript,
+            "data": payload,
+        },
     )
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            return json.loads(resp.read())
-    except (urllib.error.URLError, TimeoutError):
-        raise HTTPException(status_code=502, detail="МИС недоступна")

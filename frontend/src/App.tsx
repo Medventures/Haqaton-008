@@ -12,6 +12,12 @@ type TemplateInfo = { id: string; specialty: string; title: string };
 type Template = TemplateInfo & { fields: Field[] };
 type Doctor = { name: string; specialty: string; template_id: string };
 type Values = Record<string, string | boolean>;
+type Appointment = {
+  id: string;
+  time: string;
+  reason: string;
+  patient: { id: string; name: string; birth_year: number; sex: string };
+};
 
 const box: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: 8, font: "inherit" };
 
@@ -23,8 +29,15 @@ export default function App() {
   const [template, setTemplate] = useState<Template | null>(null);
   const [values, setValues] = useState<Values>({});
   const [result, setResult] = useState("");
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointmentId, setAppointmentId] = useState("");
+  const [transcript, setTranscript] = useState("");
 
   useEffect(() => {
+    fetch(`${BACKEND_URL}/api/appointments`)
+      .then((r) => r.json())
+      .then(setAppointments)
+      .catch(() => setAppointments([]));
     fetch(`${BACKEND_URL}/health`)
       .then((r) => r.json())
       .then((d) => setBackend(d.status))
@@ -59,7 +72,12 @@ export default function App() {
     const res = await fetch(`${BACKEND_URL}/api/consultations/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ template_id: template.id, data }),
+      body: JSON.stringify({
+        template_id: template.id,
+        appointment_id: appointmentId || null,
+        transcript,
+        data,
+      }),
     });
     const body = await res.json();
     setResult(res.ok ? `Отправлено в МИС, id: ${body.id}` : `Ошибка: ${body.detail}`);
@@ -72,6 +90,39 @@ export default function App() {
         Backend: <b>{backend}</b>
         {doctor && <> · Врач: <b>{doctor.name}</b> (тестовый профиль)</>}
       </p>
+
+      <div style={{ marginBottom: 12 }}>
+        <label>
+          Приём:{" "}
+          <select value={appointmentId} onChange={(e) => setAppointmentId(e.target.value)}>
+            <option value="">— выберите пациента —</option>
+            {appointments.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.time} · {a.patient.name} ({a.patient.birth_year})
+              </option>
+            ))}
+          </select>
+        </label>
+        {appointments.find((a) => a.id === appointmentId) && (
+          <div style={{ marginTop: 6, color: "#555" }}>
+            Повод обращения: {appointments.find((a) => a.id === appointmentId)!.reason}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label htmlFor="transcript" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+          Транскрипт консультации
+        </label>
+        <textarea
+          id="transcript"
+          rows={5}
+          style={box}
+          placeholder="Вставьте текст разговора врача и пациента (распознавание речи — позже)"
+          value={transcript}
+          onChange={(e) => setTranscript(e.target.value)}
+        />
+      </div>
 
       <label>
         Специальность:{" "}
