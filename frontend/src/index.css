@@ -129,6 +129,12 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: #75b9ae
 .recorder p { color: var(--muted); font-size: 12px; margin: 2px 0 12px; max-width: 420px; }
 .recorder .row { justify-content: center; }
 
+.meter { height: 10px; border-radius: 6px; background: #e3ecea; overflow: hidden; }
+.meter-bar { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #0a8778, #66d5be); transition: width .08s; }
+.meter-bar.hot { background: linear-gradient(90deg, #dc792d, #c83b4b); }
+.paste-box { margin: 12px 0 0; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #f8fcfb; }
+.paste-box summary { cursor: pointer; font-weight: 700; font-size: 13px; color: #48635e; }
+.paste-box textarea { margin-top: 8px; }
 .chat { border: 1px solid var(--line); border-radius: 16px; background: #fbfdfc; padding: 14px 16px; margin: 14px 0 6px; min-height: 100px; max-height: 440px; overflow: auto; }
 .chat-empty { color: #9aaba8; text-align: center; padding: 26px 8px; font-size: 13px; }
 .turn { display: flex; margin-bottom: 10px; }

@@ -58,14 +58,17 @@ export default function Dialogue({ turns, onChange, onReady, backendUrl }: Props
   const finishedRef = useRef(true);
 
   // Роли определяет ИИ по смыслу разговора (браузер говорящих не различает)
-  const finish = async () => {
+  const finish = () => {
     if (finishedRef.current) return;
     finishedRef.current = true;
-    const segments = segmentsRef.current;
-    if (!segments.length) {
-      setError("Речь не распознана. Проверьте микрофон и попробуйте ещё раз.");
+    if (!segmentsRef.current.length) {
+      setError("Речь не распознана. Проверьте микрофон (кнопка «Проверить микрофон») или вставьте текст разговора ниже.");
       return;
     }
+    label(segmentsRef.current);
+  };
+
+  const label = async (segments: string[]) => {
     setLabeling(true);
     try {
       const res = await fetch(`${backendUrl}/api/dialogue/diarize`, {
@@ -93,21 +96,7 @@ export default function Dialogue({ turns, onChange, onReady, backendUrl }: Props
       setError("Распознавание речи не поддерживается этим браузером. Откройте в Chrome или Edge либо загрузите пример.");
       return;
     }
-    try {
-      // параллельно пишем звук, чтобы консультацию можно было переслушать
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      chunksRef.current = [];
-      const mr = new MediaRecorder(stream);
-      mr.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
-      mr.onstop = () => setAudioUrl(URL.createObjectURL(new Blob(chunksRef.current, { type: mr.mimeType })));
-      mr.start();
-      mediaRef.current = mr;
-    } catch {
-      setError("Нет доступа к микрофону. Разрешите его в браузере или загрузите пример диалога.");
-      return;
-    }
-
+    stopMeter(); // проверка микрофона не должна удерживать устройство
     onChange([]);
     setAudioUrl("");
     segmentsRef.current = [];
@@ -133,7 +122,13 @@ export default function Dialogue({ turns, onChange, onReady, backendUrl }: Props
       setInterim(partial);
     };
     rec.onerror = (e: any) => {
-      if (e.error !== "no-speech" && e.error !== "aborted") setError(`Ошибка распознавания: ${e.error}`);
+      const hints: Record<string, string> = {
+        "not-allowed": "Доступ к микрофону запрещён: нажмите на замок рядом с адресом → Микрофон → Разрешить.",
+        "service-not-allowed": "Доступ к микрофону запрещён: нажмите на замок рядом с адресом → Микрофон → Разрешить.",
+        "audio-capture": "Микрофон не найден или занят другой программой. Закройте Zoom/Teams и проверьте микрофон в Windows.",
+        network: "Нет связи с сервисом распознавания речи (нужен интернет).",
+      };
+      if (e.error !== "no-speech" && e.error !== "aborted") setError(hints[e.error] ?? `Ошибка распознавания: ${e.error}`);
     };
     rec.onend = () => {
       setInterim("");
@@ -153,16 +148,67 @@ export default function Dialogue({ turns, onChange, onReady, backendUrl }: Props
   const stop = () => {
     activeRef.current = false;
     recRef.current?.stop();
-    if (mediaRef.current?.state === "recording") mediaRef.current.stop();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
     setRecording(false);
+  };
+
+  // ---------- проверка микрофона: индикатор уровня (отдельно от записи) ----------
+  const [testing, setTesting] = useState(false);
+  const [level, setLevel] = useState(0);
+  const meterRef = useRef<{ stream: MediaStream; ctx: AudioContext; raf: number } | null>(null);
+
+  const stopMeter = () => {
+    const m = meterRef.current;
+    if (m) {
+      cancelAnimationFrame(m.raf);
+      m.stream.getTracks().forEach((t) => t.stop());
+      m.ctx.close().catch(() => {});
+    }
+    meterRef.current = null;
+    setTesting(false);
+    setLevel(0);
+  };
+
+  const toggleMeter = async () => {
+    if (testing) return stopMeter();
+    setError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ctx = new AudioContext();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+      const state = { stream, ctx, raf: 0 };
+      const loop = () => {
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (const v of buf) sum += ((v - 128) / 128) ** 2;
+        setLevel(Math.min(1, Math.sqrt(sum / buf.length) * 6));
+        state.raf = requestAnimationFrame(loop);
+      };
+      loop();
+      meterRef.current = state;
+      setTesting(true);
+    } catch {
+      setError("Нет доступа к микрофону. Разрешите его в браузере (замок рядом с адресом) и проверьте микрофон в Windows.");
+    }
   };
 
   useEffect(() => () => {
     activeRef.current = false;
     recRef.current?.abort?.();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    stopMeter();
   }, []);
+
+  // ---------- запасной вариант: вставить или надиктовать текст (Win+H) ----------
+  const [pasted, setPasted] = useState("");
+  const submitText = () => {
+    // абзацы/строки/предложения -> сегменты; роли расставит ИИ
+    const segments = pasted.split(/\n+/).map((s) => s.trim()).filter(Boolean);
+    if (segments.length === 0) return;
+    setError("");
+    label(segments);
+  };
 
   const update = (i: number, text: string) => onChange(turns.map((t, j) => (j === i ? { ...t, text } : t)));
   const swap = (i: number) =>
@@ -204,9 +250,34 @@ export default function Dialogue({ turns, onChange, onReady, backendUrl }: Props
             <button type="button" className="btn" onClick={() => { onChange([]); setAudioUrl(""); setError(""); }}>Очистить</button>
           )}
         </div>
+        {!recording && (
+          <div className="row" style={{ marginTop: 10, width: "100%", maxWidth: 460 }}>
+            <button type="button" className="btn" onClick={toggleMeter} disabled={labeling}>
+              {testing ? "Выключить проверку" : "🎚 Проверить микрофон"}
+            </button>
+            <div className="meter" style={{ flex: 1, minWidth: 120 }}>
+              <div className={`meter-bar${level > 0.85 ? " hot" : ""}`} style={{ width: `${level * 100}%` }} />
+            </div>
+          </div>
+        )}
       </div>
       {labeling && <div className="busy"><span className="spinner" /> ИИ определяет, кто говорит — врач или пациент…</div>}
       {error && <div className="err">{error}</div>}
+
+      {!recording && (
+        <details className="paste-box" open={Boolean(error)}>
+          <summary>Не слышит микрофон? Вставьте или надиктуйте текст разговора (Win+H)</summary>
+          <textarea
+            rows={4}
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            placeholder="Например: Что вас беспокоит? Последние полгода вижу хуже, особенно вечером… (можно продиктовать голосом Windows: клавиши Win+H). Роли врач/пациент расставит ИИ."
+          />
+          <button type="button" className="btn btn-primary" style={{ marginTop: 6 }} onClick={submitText} disabled={labeling || !pasted.trim()}>
+            Определить роли и собрать анамнез
+          </button>
+        </details>
+      )}
 
       <div className="chat">
         {recording ? (
