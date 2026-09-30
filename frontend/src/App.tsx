@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Dialogue, { Turn, turnsToText } from "./Dialogue";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
 
@@ -33,7 +34,8 @@ export default function App() {
   const [result, setResult] = useState("");
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentId, setAppointmentId] = useState("");
-  const [transcript, setTranscript] = useState("");
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const transcript = turnsToText(turns);
 
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/appointments`)
@@ -162,17 +164,7 @@ export default function App() {
       </div>
 
       <div style={{ marginBottom: 12 }}>
-        <label htmlFor="transcript" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
-          Транскрипт консультации
-        </label>
-        <textarea
-          id="transcript"
-          rows={5}
-          style={box}
-          placeholder="Вставьте текст разговора врача и пациента (распознавание речи — позже)"
-          value={transcript}
-          onChange={(e) => setTranscript(e.target.value)}
-        />
+        <Dialogue turns={turns} onChange={setTurns} />
         <button
           type="button"
           onClick={draft}
