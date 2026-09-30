@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import Dialogue, { Turn, turnsToText } from "./Dialogue";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
@@ -210,9 +210,9 @@ export default function App() {
     <>
       <header className="topbar">
         <div className="brand">
-          <img src="/aibolit-mark-128.png" alt="AiBolit" width={46} height={46} />
+          <img src="/brand-mark-128.png" alt="Aizhan" width={46} height={46} />
           <div>
-            <strong>AiBolit Consult</strong>
+            <strong>Aizhan Consult</strong>
             <span>AI-ассистент врача</span>
           </div>
         </div>
