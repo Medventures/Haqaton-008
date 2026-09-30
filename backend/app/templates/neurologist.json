@@ -1,0 +1,16 @@
+{
+  "id": "neurologist_v1",
+  "specialty": "neurologist",
+  "title": "Невролог",
+  "extra_fields": [
+    {"name": "neurological_status", "label": "Неврологический статус", "type": "textarea"},
+    {"name": "cranial_nerves", "label": "Черепные нервы", "type": "textarea"},
+    {"name": "reflexes", "label": "Рефлексы", "type": "textarea"},
+    {"name": "muscle_tone_strength", "label": "Мышечный тонус и сила", "type": "textarea"},
+    {"name": "sensitivity", "label": "Чувствительность", "type": "textarea"},
+    {"name": "coordination_tests", "label": "Координаторные пробы", "type": "textarea"},
+    {"name": "meningeal_signs", "label": "Менингеальные знаки", "type": "textarea"},
+    {"name": "lasegue_test", "label": "Симптом Ласега", "type": "text"},
+    {"name": "previous_examinations", "label": "Предыдущие обследования", "type": "textarea"}
+  ]
+}

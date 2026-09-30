@@ -1,0 +1,13 @@
+{
+  "id": "ophthalmologist_v1",
+  "specialty": "ophthalmologist",
+  "title": "Офтальмолог",
+  "extra_fields": [
+    {"name": "visual_acuity_od", "label": "Острота зрения OD (правый глаз)", "type": "text"},
+    {"name": "visual_acuity_os", "label": "Острота зрения OS (левый глаз)", "type": "text"},
+    {"name": "tonometry_od", "label": "Тонометрия OD", "type": "text"},
+    {"name": "tonometry_os", "label": "Тонометрия OS", "type": "text"},
+    {"name": "biomicroscopy_od", "label": "Биомикроскопия OD", "type": "textarea"},
+    {"name": "biomicroscopy_os", "label": "Биомикроскопия OS", "type": "textarea"}
+  ]
+}

@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - MIS_URL=http://mis-mock:8001
+    depends_on:
+      - mis-mock
+
+  mis-mock:
+    build: ./mis-mock
+    ports:
+      - "${MIS_PORT:-8001}:8001"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      - VITE_BACKEND_URL=http://localhost:${BACKEND_PORT:-8000}
+    depends_on:
+      - backend

@@ -1,0 +1,17 @@
+{
+  "insert_extra_before": "ai_diagnosis_suggestion",
+  "fields": [
+    {"name": "complaints", "label": "Жалобы", "type": "textarea"},
+    {"name": "anamnesis_morbi", "label": "Anamnesis morbi (история заболевания)", "type": "textarea"},
+    {"name": "anamnesis_vitae", "label": "Anamnesis vitae (история жизни)", "type": "textarea"},
+    {"name": "allergy_history", "label": "Аллергологический анамнез", "type": "textarea"},
+    {"name": "status_praesens", "label": "Status praesens (общее состояние)", "type": "textarea"},
+    {"name": "status_localis", "label": "Status localis (локальный статус)", "type": "textarea"},
+    {"name": "examinations", "label": "Обследования", "type": "textarea"},
+    {"name": "ai_diagnosis_suggestion", "label": "Диагноз (предложение ИИ)", "type": "textarea", "ai_suggestion": true},
+    {"name": "doctor_final_diagnosis", "label": "Заключительный диагноз врача", "type": "textarea"},
+    {"name": "treatment_recommendations", "label": "Рекомендации по лечению (предложение ИИ)", "type": "textarea", "ai_suggestion": true},
+    {"name": "protocol_references", "label": "Ссылки на клинические протоколы", "type": "textarea"},
+    {"name": "doctor_approved", "label": "Я проверил(а) и подтверждаю содержимое формы", "type": "checkbox"}
+  ]
+}
