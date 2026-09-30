@@ -65,6 +65,44 @@ export default function App() {
   const set = (name: string, v: string | boolean) => setValues((prev) => ({ ...prev, [name]: v }));
   const approved = values.doctor_approved === true;
 
+  const [drafting, setDrafting] = useState(false);
+  const [draftMsg, setDraftMsg] = useState("");
+
+  const draft = async () => {
+    if (!template) return;
+    setDrafting(true);
+    setDraftMsg("");
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/consultations/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          template_id: template.id,
+          transcript,
+          appointment_id: appointmentId || null,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setDraftMsg(`Ошибка: ${body.detail}`);
+        return;
+      }
+      setValues((prev) => {
+        const next = { ...prev };
+        for (const [k, v] of Object.entries(body.fields as Record<string, string>)) {
+          if (v.trim()) next[k] = v;
+        }
+        next.doctor_approved = false; // после ИИ врач должен проверить форму заново
+        return next;
+      });
+      setDraftMsg("Форма заполнена ИИ. Проверьте и отредактируйте перед подтверждением.");
+    } catch {
+      setDraftMsg("Ошибка: backend недоступен");
+    } finally {
+      setDrafting(false);
+    }
+  };
+
   const submit = async () => {
     if (!template || !approved) return;
     const data: Values = {};
@@ -122,6 +160,15 @@ export default function App() {
           value={transcript}
           onChange={(e) => setTranscript(e.target.value)}
         />
+        <button
+          type="button"
+          onClick={draft}
+          disabled={drafting || !transcript.trim() || !template}
+          style={{ marginTop: 6, padding: "8px 16px" }}
+        >
+          {drafting ? "ИИ заполняет форму..." : "🤖 Заполнить форму по транскрипту"}
+        </button>
+        {draftMsg && <span style={{ marginLeft: 8 }}>{draftMsg}</span>}
       </div>
 
       <label>

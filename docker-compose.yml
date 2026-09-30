@@ -5,6 +5,8 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
       - MIS_URL=http://mis-mock:8001
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-5-5}
     depends_on:
       - mis-mock
 

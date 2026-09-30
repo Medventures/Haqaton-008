@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .llm import draft_fields
 from .template_store import TEMPLATES
 
 MIS_URL = os.getenv("MIS_URL", "http://localhost:8001")
@@ -79,6 +80,35 @@ def get_template(template_id: str):
     if template is None:
         raise HTTPException(status_code=404, detail="Шаблон не найден")
     return template
+
+
+class DraftRequest(BaseModel):
+    template_id: str
+    transcript: str
+    appointment_id: str | None = None
+
+
+@app.post("/api/consultations/draft")
+def draft_consultation(req: DraftRequest):
+    """ИИ-черновик формы по транскрипту. Результат — только предложения для врача."""
+    template = TEMPLATES.get(req.template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Шаблон не найден")
+    if not req.transcript.strip():
+        raise HTTPException(status_code=422, detail="Транскрипт пуст")
+
+    reason = None
+    if req.appointment_id:
+        apt = next((a for a in mis_request("GET", "/api/appointments") if a["id"] == req.appointment_id), None)
+        reason = apt["reason"] if apt else None
+
+    try:
+        fields = draft_fields(template, req.transcript, reason)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=502, detail="Ошибка обращения к ИИ")
+    return {"fields": fields}
 
 
 @app.post("/api/consultations/submit")

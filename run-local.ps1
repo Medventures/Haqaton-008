@@ -2,6 +2,13 @@
 # Использование: powershell -ExecutionPolicy Bypass -File .\run-local.ps1
 $root = $PSScriptRoot
 
+# Подхватить переменные из .env (если есть), дочерние окна их унаследуют
+if (Test-Path "$root\.env") {
+    Get-Content "$root\.env" | ForEach-Object {
+        if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') { Set-Item "env:$($Matches[1])" $Matches[2] }
+    }
+}
+
 foreach ($svc in @(@{dir="backend"; port=8000}, @{dir="mis-mock"; port=8001})) {
     $dir = Join-Path $root $svc.dir
     if (-not (Test-Path "$dir\.venv")) {
