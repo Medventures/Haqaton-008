@@ -21,5 +21,6 @@ services:
       - "${FRONTEND_PORT:-5173}:5173"
     environment:
       - VITE_BACKEND_URL=http://localhost:${BACKEND_PORT:-8000}
+      - VITE_MIS_URL=http://localhost:${MIS_PORT:-8001}
     depends_on:
       - backend

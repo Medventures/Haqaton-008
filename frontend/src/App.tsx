@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Dialogue, { Turn, turnsToText } from "./Dialogue";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
+const MIS_URL = import.meta.env.VITE_MIS_URL ?? "http://localhost:8001";
 
 type Field = {
   name: string;
@@ -21,31 +22,44 @@ type Appointment = {
   reason: string;
   patient: { id: string; name: string; birth_year: number; sex: string };
 };
-
-const box: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: 8, font: "inherit" };
+type MisRecord = {
+  id: string;
+  received_at: string;
+  dialogue: Turn[];
+  document: { title: string; sections: { label: string; value: string }[] };
+};
 
 export default function App() {
-  const [backend, setBackend] = useState("проверка...");
+  const [backend, setBackend] = useState<"..." | "ok" | "down">("...");
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [templates, setTemplates] = useState<TemplateInfo[]>([]);
   const [templateId, setTemplateId] = useState("");
   const [template, setTemplate] = useState<Template | null>(null);
   const [values, setValues] = useState<Values>({});
-  const [result, setResult] = useState("");
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentId, setAppointmentId] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
-  const transcript = turnsToText(turns);
+
+  const [drafting, setDrafting] = useState(false);
+  const [draftMsg, setDraftMsg] = useState("");
+  const [references, setReferences] = useState<Reference[]>([]);
+  const [redFlags, setRedFlags] = useState<RedFlag[]>([]);
+  const [missing, setMissing] = useState<string[]>([]);
+  const [flagsAck, setFlagsAck] = useState(false);
+
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState<MisRecord | null>(null);
 
   useEffect(() => {
+    fetch(`${BACKEND_URL}/health`)
+      .then((r) => r.json())
+      .then(() => setBackend("ok"))
+      .catch(() => setBackend("down"));
     fetch(`${BACKEND_URL}/api/appointments`)
       .then((r) => r.json())
       .then(setAppointments)
       .catch(() => setAppointments([]));
-    fetch(`${BACKEND_URL}/health`)
-      .then((r) => r.json())
-      .then((d) => setBackend(d.status))
-      .catch(() => setBackend("недоступен"));
     Promise.all([
       fetch(`${BACKEND_URL}/api/doctor/profile`).then((r) => r.json()),
       fetch(`${BACKEND_URL}/api/templates`).then((r) => r.json()),
@@ -55,7 +69,7 @@ export default function App() {
         setTemplates(t);
         setTemplateId(d.template_id); // специальность из профиля врача
       })
-      .catch(() => setBackend("недоступен"));
+      .catch(() => setBackend("down"));
   }, []);
 
   useEffect(() => {
@@ -63,36 +77,31 @@ export default function App() {
     fetch(`${BACKEND_URL}/api/templates/${templateId}`)
       .then((r) => r.json())
       .then(setTemplate);
-    setResult("");
     setReferences([]);
     setRedFlags([]);
+    setMissing([]);
     setFlagsAck(false);
+    setSent(null);
   }, [templateId]);
 
-  const [drafting, setDrafting] = useState(false);
-  const [draftMsg, setDraftMsg] = useState("");
-  const [references, setReferences] = useState<Reference[]>([]);
-  const [redFlags, setRedFlags] = useState<RedFlag[]>([]);
-  const [flagsAck, setFlagsAck] = useState(false);
-
   const set = (name: string, v: string | boolean) => setValues((prev) => ({ ...prev, [name]: v }));
+  const appointment = appointments.find((a) => a.id === appointmentId);
   // пока врач не ознакомился с красными флагами, подтвердить форму нельзя
   const needsAck = redFlags.length > 0 && !flagsAck;
   const approved = values.doctor_approved === true && !needsAck;
 
-  const draft = async () => {
-    if (!template) return;
+  // Собирает анамнез и заполняет форму по диалогу
+  const draft = async (source: Turn[] = turns) => {
+    const transcript = turnsToText(source);
+    if (!template || !transcript) return;
     setDrafting(true);
     setDraftMsg("");
+    setSent(null);
     try {
       const res = await fetch(`${BACKEND_URL}/api/consultations/draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          template_id: template.id,
-          transcript,
-          appointment_id: appointmentId || null,
-        }),
+        body: JSON.stringify({ template_id: template.id, transcript, appointment_id: appointmentId || null }),
       });
       const body = await res.json();
       if (!res.ok) {
@@ -109,8 +118,9 @@ export default function App() {
       });
       setReferences(body.references ?? []);
       setRedFlags(body.red_flags ?? []);
+      setMissing(body.missing_information ?? []);
       setFlagsAck(false);
-      setDraftMsg("Форма заполнена ИИ. Проверьте и отредактируйте перед подтверждением.");
+      setDraftMsg("Анамнез собран и документ сформирован. Проверьте и при необходимости отредактируйте.");
     } catch {
       setDraftMsg("Ошибка: backend недоступен");
     } finally {
@@ -120,172 +130,221 @@ export default function App() {
 
   const submit = async () => {
     if (!template || !approved) return;
+    setSending(true);
+    setError("");
     const data: Values = {};
     template.fields.forEach((f) => (data[f.name] = values[f.name] ?? (f.type === "checkbox" ? false : "")));
-    const res = await fetch(`${BACKEND_URL}/api/consultations/submit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        template_id: template.id,
-        appointment_id: appointmentId || null,
-        transcript,
-        data,
-      }),
-    });
-    const body = await res.json();
-    setResult(res.ok ? `Отправлено в МИС, id: ${body.id}` : `Ошибка: ${body.detail}`);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/consultations/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          template_id: template.id,
+          appointment_id: appointmentId || null,
+          transcript: turnsToText(turns),
+          turns,
+          data,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(`Ошибка: ${body.detail}`);
+        return;
+      }
+      // показываем, что именно получила МИС
+      const rec = await fetch(`${BACKEND_URL}/api/mis/consultations/${body.id}`).then((r) => r.json());
+      setSent(rec);
+    } catch {
+      setError("Ошибка: backend недоступен");
+    } finally {
+      setSending(false);
+    }
   };
 
+  const docFields = template?.fields.filter((f) => f.type !== "checkbox") ?? [];
+
   return (
-    <main style={{ fontFamily: "sans-serif", maxWidth: 760, margin: "2rem auto", padding: "0 1rem" }}>
-      <h1>Консультация</h1>
-      <p>
-        Backend: <b>{backend}</b>
-        {doctor && <> · Врач: <b>{doctor.name}</b> (тестовый профиль)</>}
-      </p>
+    <>
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark">✚</div>
+          <span>ИИ-ассистент консультации</span>
+        </div>
+        <div className="topbar-right">
+          <span><span className={`dot ${backend === "ok" ? "ok" : backend === "down" ? "bad" : ""}`} />сервер {backend === "ok" ? "на связи" : backend === "down" ? "недоступен" : "…"}</span>
+          {doctor && <span>🩺 {doctor.name} · тестовый профиль</span>}
+        </div>
+      </header>
 
-      <div style={{ marginBottom: 12 }}>
-        <label>
-          Приём:{" "}
-          <select value={appointmentId} onChange={(e) => setAppointmentId(e.target.value)}>
-            <option value="">— выберите пациента —</option>
-            {appointments.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.time} · {a.patient.name} ({a.patient.birth_year})
-              </option>
-            ))}
-          </select>
-        </label>
-        {appointments.find((a) => a.id === appointmentId) && (
-          <div style={{ marginTop: 6, color: "#555" }}>
-            Повод обращения: {appointments.find((a) => a.id === appointmentId)!.reason}
-          </div>
-        )}
-      </div>
+      <div className="page">
+        <div className="grid">
+          {/* ---------- левая колонка: приём и запись ---------- */}
+          <div className="col">
+            <section className="card">
+              <div className="card-head"><span className="step">1</span><h2>Пациент и приём</h2></div>
+              <label className="lbl" htmlFor="apt">Приём</label>
+              <select id="apt" value={appointmentId} onChange={(e) => setAppointmentId(e.target.value)} style={{ width: "100%" }}>
+                <option value="">— выберите пациента —</option>
+                {appointments.map((a) => (
+                  <option key={a.id} value={a.id}>{a.time} · {a.patient.name} ({a.patient.birth_year})</option>
+                ))}
+              </select>
+              {appointment && <div className="muted" style={{ marginTop: 8 }}>Повод обращения: <b>{appointment.reason}</b></div>}
+              <div style={{ marginTop: 12 }}>
+                <label className="lbl" htmlFor="spec">Специальность</label>
+                <select id="spec" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+                  {templates.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+                </select>
+                {doctor && templateId !== doctor.template_id && <span className="muted" style={{ marginLeft: 8 }}>изменено вручную</span>}
+              </div>
+            </section>
 
-      <div style={{ marginBottom: 12 }}>
-        <Dialogue turns={turns} onChange={setTurns} />
-        <button
-          type="button"
-          onClick={draft}
-          disabled={drafting || !transcript.trim() || !template}
-          style={{ marginTop: 6, padding: "8px 16px" }}
-        >
-          {drafting ? "ИИ заполняет форму..." : "🤖 Заполнить форму по транскрипту"}
-        </button>
-        {draftMsg && <span style={{ marginLeft: 8 }}>{draftMsg}</span>}
+            <section className="card">
+              <div className="card-head">
+                <span className="step">2</span><h2>Запись консультации</h2>
+                <span className="hint">роли врач / пациент — автоматически</span>
+              </div>
+              <Dialogue turns={turns} onChange={setTurns} onReady={(t) => draft(t)} backendUrl={BACKEND_URL} />
 
-        {redFlags.length > 0 && (
-          <div style={{ marginTop: 10, padding: 10, border: "2px solid #c0392b", background: "#fdecea", borderRadius: 6 }}>
-            <b>⚠ Красные флаги (требуют внимания врача)</b>
-            <ul style={{ margin: "6px 0" }}>
-              {redFlags.map((f) => (
-                <li key={f.id}>
-                  <b>{f.severity === "critical" ? "КРИТИЧНО" : "Срочно"}:</b> {f.message}
-                </li>
-              ))}
-            </ul>
-            <label>
-              <input type="checkbox" checked={flagsAck} onChange={(e) => setFlagsAck(e.target.checked)} /> Я ознакомился(ась)
-              с красными флагами
-            </label>
-          </div>
-        )}
+              <div className="row" style={{ marginTop: 10 }}>
+                <button type="button" className="btn btn-primary" onClick={() => draft()} disabled={drafting || !turns.length || !template}>
+                  {turns.length && template && (values.complaints || missing.length) ? "↻ Пересобрать анамнез" : "Собрать анамнез и документ"}
+                </button>
+                {drafting && <span className="busy"><span className="spinner" /> ИИ собирает полный анамнез…</span>}
+              </div>
+              {draftMsg && <div className={draftMsg.startsWith("Ошибка") ? "err" : "ok-msg"} style={{ marginTop: 8 }}>{draftMsg}</div>}
 
-        {references.length > 0 && (
-          <div style={{ marginTop: 10, fontSize: 14 }}>
-            <b>Использованные страницы протоколов МЗ РК:</b>
-            <ul style={{ margin: "4px 0" }}>
-              {references.map((r) => (
-                <li key={`${r.protocol_id}-${r.page}`}>
-                  <a href={`${BACKEND_URL}/api/protocols/${r.protocol_id}/pdf#page=${r.page}`} target="_blank" rel="noreferrer">
-                    {r.title} (протокол №{r.number}), стр. {r.page}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      <label>
-        Специальность:{" "}
-        <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>{t.title}</option>
-          ))}
-        </select>
-      </label>
-      {doctor && templateId !== doctor.template_id && (
-        <small style={{ marginLeft: 8, color: "#a60" }}>изменено вручную</small>
-      )}
-
-      {template && (
-        <form onSubmit={(e) => e.preventDefault()} style={{ marginTop: 16 }}>
-          {template.fields.map((f) => (
-            <div
-              key={f.name}
-              style={{
-                marginBottom: 14,
-                ...(f.ai_suggestion && {
-                  border: "2px dashed #7a5af8",
-                  background: "#f5f2ff",
-                  padding: 10,
-                  borderRadius: 6,
-                }),
-              }}
-            >
-              {f.type === "checkbox" ? (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={values[f.name] === true}
-                    disabled={f.name === "doctor_approved" && needsAck}
-                    onChange={(e) => set(f.name, e.target.checked)}
-                  />{" "}
-                  <b>{f.label}</b>
-                  {f.name === "doctor_approved" && needsAck && (
-                    <small style={{ marginLeft: 8, color: "#c0392b" }}>сначала ознакомьтесь с красными флагами</small>
-                  )}
-                </label>
-              ) : (
-                <>
-                  <label htmlFor={f.name} style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
-                    {f.label}
-                    {f.ai_suggestion && (
-                      <span style={{ marginLeft: 8, fontSize: 12, color: "#5b3fd1" }}>
-                        🤖 Предложение ИИ — требует проверки врачом
-                      </span>
-                    )}
+              {redFlags.length > 0 && (
+                <div className="flags">
+                  <b>⚠ Красные флаги — требуют внимания врача</b>
+                  <ul>
+                    {redFlags.map((f) => (
+                      <li key={f.id}><b>{f.severity === "critical" ? "КРИТИЧНО" : "Срочно"}:</b> {f.message}</li>
+                    ))}
+                  </ul>
+                  <label>
+                    <input type="checkbox" checked={flagsAck} onChange={(e) => setFlagsAck(e.target.checked)} /> Я ознакомился(ась) с красными флагами
                   </label>
-                  {f.type === "textarea" ? (
-                    <textarea
-                      id={f.name}
-                      rows={3}
-                      style={box}
-                      value={(values[f.name] as string) ?? ""}
-                      onChange={(e) => set(f.name, e.target.value)}
-                    />
-                  ) : (
-                    <input
-                      id={f.name}
-                      style={box}
-                      value={(values[f.name] as string) ?? ""}
-                      onChange={(e) => set(f.name, e.target.value)}
-                    />
-                  )}
-                </>
+                </div>
               )}
-            </div>
-          ))}
 
-          <button type="button" onClick={submit} disabled={!approved} style={{ padding: "10px 20px" }}>
-            Отправить в МИС
-          </button>
-          {!approved && <small style={{ marginLeft: 8 }}>Сначала подтвердите форму</small>}
-          {result && <p>{result}</p>}
-        </form>
-      )}
-    </main>
+              {missing.length > 0 && (
+                <div className="panel warn">
+                  <h4>Уточнить у пациента для полного анамнеза</h4>
+                  <ul>{missing.map((m, i) => <li key={i}>{m}</li>)}</ul>
+                </div>
+              )}
+
+              {references.length > 0 && (
+                <div className="panel info">
+                  <h4>Использованные страницы протоколов МЗ РК</h4>
+                  <ul>
+                    {references.map((r) => (
+                      <li key={`${r.protocol_id}-${r.page}`}>
+                        <a href={`${BACKEND_URL}/api/protocols/${r.protocol_id}/pdf#page=${r.page}`} target="_blank" rel="noreferrer">
+                          {r.title} (протокол №{r.number}), стр. {r.page}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* ---------- правая колонка: анамнез ---------- */}
+          <div className="col">
+            <section className="card">
+              <div className="card-head">
+                <span className="step">3</span><h2>Анамнез и форма осмотра</h2>
+                <span className="hint">{template?.title}</span>
+              </div>
+              {!template && <div className="muted">Загрузка шаблона…</div>}
+              {template && (
+                <form onSubmit={(e) => e.preventDefault()}>
+                  {template.fields.filter((f) => f.type !== "checkbox").map((f) => (
+                    <div key={f.name} className={`field${f.ai_suggestion ? " ai" : ""}`}>
+                      <label className="lbl" htmlFor={f.name}>
+                        {f.label}
+                        {f.ai_suggestion && <span className="ai-badge">🤖 Предложение ИИ — требует проверки врачом</span>}
+                      </label>
+                      {f.type === "textarea" ? (
+                        <textarea id={f.name} rows={3} value={(values[f.name] as string) ?? ""} onChange={(e) => set(f.name, e.target.value)} />
+                      ) : (
+                        <input id={f.name} type="text" value={(values[f.name] as string) ?? ""} onChange={(e) => set(f.name, e.target.value)} />
+                      )}
+                    </div>
+                  ))}
+                </form>
+              )}
+            </section>
+          </div>
+        </div>
+
+        {/* ---------- документ и МИС ---------- */}
+        <div className="grid" style={{ marginTop: 20 }}>
+          <section className="card">
+            <div className="card-head">
+              <span className="step">4</span><h2>Документ консультации</h2>
+              <button type="button" className="btn" style={{ marginLeft: "auto" }} onClick={() => window.print()}>🖨 Печать / PDF</button>
+            </div>
+            {template && (
+              <article className="doc">
+                <h3>Лист консультации — {template.title}</h3>
+                <div className="doc-meta">
+                  Пациент: {appointment ? `${appointment.patient.name}, ${appointment.patient.birth_year} г.р.` : "не выбран"} · Врач: {doctor?.name} ·{" "}
+                  {new Date().toLocaleDateString("ru-RU")}
+                </div>
+                {docFields.map((f) => {
+                  const v = ((values[f.name] as string) ?? "").trim();
+                  return (
+                    <div key={f.name} className={`doc-sec${f.ai_suggestion ? " ai" : ""}`}>
+                      <b>{f.label}</b>
+                      {v ? <span style={{ whiteSpace: "pre-wrap" }}>{v}</span> : <span className="none">не указано</span>}
+                    </div>
+                  );
+                })}
+                <div className="doc-foot">
+                  Поля, помеченные как предложение ИИ, вступают в силу только после подтверждения врачом. Данные вымышленные.
+                </div>
+              </article>
+            )}
+          </section>
+
+          <section className="card">
+            <div className="card-head"><span className="step">5</span><h2>Отправка в МИС</h2></div>
+            <p className="muted" style={{ marginTop: 0 }}>
+              В МИС уйдёт то же, что вы видите: запись диалога врач—пациент и подписанный документ.
+            </p>
+            <label className="row" style={{ marginBottom: 10 }}>
+              <input
+                type="checkbox"
+                checked={values.doctor_approved === true}
+                disabled={needsAck}
+                onChange={(e) => set("doctor_approved", e.target.checked)}
+              />
+              <b>Я проверил(а) и подтверждаю содержимое формы</b>
+            </label>
+            {needsAck && <div className="err">Сначала ознакомьтесь с красными флагами.</div>}
+            <button type="button" className="btn btn-primary btn-lg" onClick={submit} disabled={!approved || sending || !turns.length}>
+              {sending ? "Отправка…" : "Отправить в МИС"}
+            </button>
+            {!approved && <span className="muted" style={{ marginLeft: 10 }}>отправка заблокирована, пока врач не подтвердит форму</span>}
+            {error && <div className="err">{error}</div>}
+
+            {sent && (
+              <div className="sent">
+                <b>✅ МИС приняла запись</b>
+                <div className="muted">№ <span className="mono">{sent.id}</span> · {sent.received_at}</div>
+                <div style={{ margin: "6px 0" }}>
+                  Получено: диалог — {sent.dialogue.length} реплик, документ — {sent.document.sections.length} разделов.
+                </div>
+                <a href={`${MIS_URL}/#${sent.id}`} target="_blank" rel="noreferrer">Открыть запись в МИС ↗</a>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    </>
   );
 }

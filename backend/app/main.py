@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 from fastapi.responses import FileResponse
 
-from .llm import draft_fields
+from .document import build_document
+from .llm import draft_fields, label_speakers
 from .protocols import DIR as PROTOCOLS_DIR, PROTOCOLS, evaluate_red_flags, reference, retrieve
 from .template_store import TEMPLATES
 
@@ -38,6 +39,7 @@ class Submission(BaseModel):
     data: dict
     appointment_id: str | None = None
     transcript: str = ""
+    turns: list[dict] = []
 
 
 def mis_request(method: str, path: str, body: dict | None = None):
@@ -50,8 +52,34 @@ def mis_request(method: str, path: str, body: dict | None = None):
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=e.code, detail="МИС отклонила запрос")
     except (urllib.error.URLError, TimeoutError):
         raise HTTPException(status_code=502, detail="МИС недоступна")
+
+
+class DiarizeRequest(BaseModel):
+    segments: list[str]
+
+
+@app.post("/api/dialogue/diarize")
+def diarize(req: DiarizeRequest):
+    """Автоматически определяет, где говорит врач, а где пациент."""
+    segments = [s.strip() for s in req.segments if s.strip()]
+    if not segments:
+        raise HTTPException(status_code=422, detail="Нет текста для разметки")
+    try:
+        return {"turns": label_speakers(segments)}
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=502, detail="Ошибка обращения к ИИ")
+
+
+@app.get("/api/mis/consultations/{record_id}")
+def mis_record(record_id: str):
+    """Что именно получила МИС (для показа в интерфейсе)."""
+    return mis_request("GET", f"/api/consultations/{record_id}")
 
 
 @app.get("/api/appointments")
@@ -107,13 +135,14 @@ def draft_consultation(req: DraftRequest):
 
     excerpts = retrieve(template["specialty"], f"{reason or ''} {req.transcript}")
     try:
-        fields, concepts = draft_fields(template, req.transcript, reason, excerpts)
+        fields, concepts, missing = draft_fields(template, req.transcript, reason, excerpts)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception:
         raise HTTPException(status_code=502, detail="Ошибка обращения к ИИ")
     return {
         "fields": fields,
+        "missing_information": missing,
         "references": [reference(c) for c in excerpts],
         "red_flags": evaluate_red_flags(concepts),
     }
@@ -146,6 +175,16 @@ def submit_to_mis(submission: Submission):
 
     allowed = {f["name"] for f in template["fields"]}
     payload = {k: v for k, v in submission.data.items() if k in allowed}
+    patient = None
+    if submission.appointment_id:
+        apt = next((a for a in mis_request("GET", "/api/appointments") if a["id"] == submission.appointment_id), None)
+        patient = apt["patient"] if apt else None
+
+    turns = [
+        {"speaker": t["speaker"], "text": str(t["text"])}
+        for t in submission.turns
+        if t.get("speaker") in ("doctor", "patient") and str(t.get("text", "")).strip()
+    ]
     return mis_request(
         "POST",
         "/api/consultations",
@@ -153,6 +192,8 @@ def submit_to_mis(submission: Submission):
             "template_id": template["id"],
             "appointment_id": submission.appointment_id,
             "transcript": submission.transcript,
+            "dialogue": turns,
+            "document": build_document(template, payload, TEST_DOCTOR, patient),
             "data": payload,
         },
     )
