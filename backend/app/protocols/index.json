@@ -1,0 +1,151 @@
+{
+ "protocols": [
+  {
+   "id": "mzrk-cataract-214",
+   "protocol_number": "214",
+   "approved_date": "2024-09-19",
+   "revision_year": 2023,
+   "icd10": [
+    "H25",
+    "H26"
+   ],
+   "file": "01_cataract_mzrk.pdf",
+   "official_url": "https://nrchd.kz/storage/documents/Клинические протоколы/Поток клинические протоколы/Катаракта.pdf",
+   "specialty": [
+    "Офтальмология"
+   ],
+   "title": "Катаракта"
+  },
+  {
+   "id": "mzrk-amd-244",
+   "protocol_number": "244",
+   "approved_date": "2025-12-30",
+   "revision_year": 2025,
+   "icd10": [
+    "H35.3"
+   ],
+   "file": "02_age_related_macular_degeneration_mzrk.pdf",
+   "official_url": "https://nrchd.kz/storage/documents/Клинические протоколы/Поток клинические протоколы/Возрастная макулярная дегенерация.pdf",
+   "specialty": [
+    "Офтальмология"
+   ],
+   "title": "Возрастная макулярная дегенерация"
+  },
+  {
+   "id": "mzrk-low-back-pain-2025",
+   "file": "01_low_back_pain_mzrk.pdf",
+   "title": "Скелетно-мышечная (неспецифическая) боль в нижней части спины",
+   "specialty": [
+    "Неврология",
+    "Неотложная медицина"
+   ],
+   "icd10": [
+    "M40-M54",
+    "M54",
+    "M54.5"
+   ],
+   "approved_date": "2025-07-16",
+   "protocol_number": "235",
+   "role": "primary_demo_protocol",
+   "source_url": "https://nrchd.kz/storage/documents/Клинические протоколы/Поток клинические протоколы/Скелетно-мышечной (неспецифической) боли в нижней части спины.pdf"
+  },
+  {
+   "id": "mzrk-nerve-roots-2017",
+   "file": "02_nerve_roots_plexuses_mzrk.pdf",
+   "title": "Поражение нервных корешков и сплетений",
+   "specialty": [
+    "Неврология"
+   ],
+   "icd10": [
+    "G54.0",
+    "G54.1",
+    "G54.2",
+    "G54.3",
+    "G54.4",
+    "M51.1",
+    "M54.1",
+    "M54.3",
+    "M54.4",
+    "M54.5"
+   ],
+   "approved_date": "2017-11-10",
+   "protocol_number": "32",
+   "role": "secondary_demo_protocol",
+   "source_url": "https://nrchd.kz/storage/documents/Клинические протоколы/Поток клинические протоколы/Поражение нервных корешков и сплетений.pdf"
+  },
+  {
+   "id": "mzrk-conjunctivitis-2024",
+   "file": "03_conjunctivitis_mzrk.pdf",
+   "title": "Конъюнктивит",
+   "specialty": [
+    "Офтальмология"
+   ],
+   "icd10": [
+    "H10.0",
+    "H10.1",
+    "H10.2",
+    "H10.3",
+    "H10.4",
+    "H10.5",
+    "H10.8",
+    "H10.9"
+   ],
+   "approved_date": "2024-11-26",
+   "protocol_number": "219",
+   "role": "alternate_demo_protocol",
+   "warning": "Не применять к примеру субконъюнктивального кровоизлияния без решения врача.",
+   "source_url": "https://nrchd.kz/storage/documents/Клинические протоколы/Поток клинические протоколы/Конъюнктивит.pdf"
+  },
+  {
+   "id": "mzrk-hypertension-adults-2026",
+   "file": "04_hypertension_adults_mzrk_2026.pdf",
+   "title": "Артериальная гипертензия у взрослых",
+   "specialty": [
+    "Терапия",
+    "Кардиология"
+   ],
+   "icd10": [
+    "I10"
+   ],
+   "approved_date": "2026-06-10",
+   "protocol_number": "253",
+   "role": "comorbidity_reference",
+   "source_url": "https://nrchd.kz/storage/documents/Клинические протоколы/Поток клинические протоколы/Артериальная гипертензия у взрослых.pdf"
+  },
+  {
+   "id": "mzrk-stable-angina-2015",
+   "file": "05_stable_angina_mzrk.pdf",
+   "title": "ИБС. Стабильная стенокардия напряжения",
+   "specialty": [
+    "Терапия",
+    "Кардиология"
+   ],
+   "icd10": [
+    "I20.8"
+   ],
+   "approved_date": "2015-11-30",
+   "protocol_number": "18",
+   "role": "comorbidity_reference",
+   "source_url": "https://nrchd.kz/storage/documents/Клинические протоколы/Поток клинические протоколы/ИБС. СТАБИЛЬНАЯ СТЕНОКАРДИЯ НАПРЯЖЕНИЯ.pdf"
+  },
+  {
+   "id": "mzrk-iron-deficiency-anemia-2017",
+   "file": "06_iron_deficiency_anemia_mzrk.pdf",
+   "title": "Железодефицитная анемия",
+   "specialty": [
+    "Терапия",
+    "Гематология"
+   ],
+   "icd10": [
+    "D50",
+    "D50.0",
+    "D50.8",
+    "D50.9"
+   ],
+   "approved_date": "2017-10-05",
+   "protocol_number": "29",
+   "role": "comorbidity_reference",
+   "source_url": "https://nrchd.kz/storage/documents/Клинические протоколы/Поток клинические протоколы/ЖЕЛЕЗОДЕФИЦИТНАЯ АНЕМИЯ.pdf"
+  }
+ ]
+}

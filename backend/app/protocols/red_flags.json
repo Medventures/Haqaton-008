@@ -1,0 +1,83 @@
+{
+  "ruleset_id": "ophthalmology-safety-v1",
+  "purpose": "Workflow-подсказки и блокирующие проверки; не автономная диагностика или маршрутизация пациента.",
+  "rules": [
+    {
+      "id": "sudden_vision_loss",
+      "severity": "critical",
+      "match": {"any_concept": ["sudden_vision_loss", "rapid_major_vision_drop"]},
+      "ui_action": "stop_autofinalization_and_require_immediate_doctor_review",
+      "message_ru": "Внезапное или быстрое выраженное снижение зрения — критический сигнал. Требуется немедленная оценка врачом."
+    },
+    {
+      "id": "retinal_detachment_pattern",
+      "severity": "critical",
+      "match": {"any_concept": ["curtain_or_veil", "new_flashes_with_floaters"]},
+      "ui_action": "stop_autofinalization_and_require_immediate_doctor_review",
+      "message_ru": "Новый «занавес/пелена», вспышки или резкое увеличение мушек требуют немедленной оценки врачом."
+    },
+    {
+      "id": "painful_red_eye_pattern",
+      "severity": "critical",
+      "match": {"all_concepts": ["severe_eye_pain", "eye_redness"], "supporting_any": ["halos", "nausea", "vomiting"]},
+      "ui_action": "stop_autofinalization_and_require_immediate_doctor_review",
+      "message_ru": "Сильная боль и покраснение глаза, особенно с радужными кругами или тошнотой, — критический сигнал."
+    },
+    {
+      "id": "acute_neurologic_pattern",
+      "severity": "critical",
+      "match": {"any_concept": ["new_weakness", "new_speech_disorder", "new_facial_asymmetry", "sudden_severe_headache", "confusion", "seizure"]},
+      "ui_action": "stop_autofinalization_and_require_immediate_doctor_review",
+      "message_ru": "Новый очаговый неврологический симптом, внезапная сильная головная боль, спутанность или судороги требуют немедленной оценки врачом."
+    },
+    {
+      "id": "retinal_or_subretinal_hemorrhage",
+      "severity": "urgent",
+      "match": {"any_concept": ["retinal_hemorrhage", "subretinal_hemorrhage"]},
+      "ui_action": "highlight_and_require_doctor_acknowledgement",
+      "message_ru": "Описано ретинальное/субретинальное кровоизлияние. Нельзя завершить лист без подтверждения врача и оценки макулы."
+    },
+    {
+      "id": "suspected_active_wet_amd",
+      "severity": "urgent",
+      "match": {"any_concept": ["suspected_cnv", "suspected_wet_amd", "new_metamorphopsia", "new_central_scotoma"]},
+      "ui_action": "require_macula_assessment_and_doctor_acknowledgement",
+      "message_ru": "Есть признаки возможной неоваскулярной макулярной патологии. Требуются объективные данные и подтверждение офтальмолога."
+    },
+    {
+      "id": "profound_or_asymmetric_loss",
+      "severity": "urgent",
+      "match": {"any_concept": ["counting_fingers_vision", "hand_motion_vision", "marked_intereye_asymmetry"]},
+      "ui_action": "highlight_cause_not_explained_by_cataract_alone",
+      "message_ru": "Выраженное или резко асимметричное снижение зрения требует поиска сопутствующей причины; не относите его автоматически только к катаракте."
+    },
+    {
+      "id": "missing_basic_eye_exam",
+      "severity": "blocker",
+      "match": {"missing_any": ["visual_acuity.od.uncorrected", "visual_acuity.os.uncorrected", "intraocular_pressure.od", "intraocular_pressure.os", "ophthalmoscopy.od", "ophthalmoscopy.os"]},
+      "ui_action": "block_mis_send",
+      "message_ru": "Не заполнены обязательные результаты базового офтальмологического обследования."
+    },
+    {
+      "id": "macular_finding_without_oct",
+      "severity": "blocker",
+      "match": {"when_any": ["macular_scar", "subretinal_hemorrhage", "suspected_wet_amd"], "missing_any": ["oct_macula.od", "oct_macula.os"]},
+      "ui_action": "block_final_ai_assessment_unless_doctor_records_override_reason",
+      "message_ru": "Макулярная находка требует ОКТ обоих глаз либо зафиксированного врачом обоснования, почему исследование не выполнено."
+    },
+    {
+      "id": "unsupported_diagnosis_or_treatment",
+      "severity": "blocker",
+      "match": {"any_concept": ["diagnosis_without_evidence", "treatment_without_selected_protocol", "unconfirmed_ai_treatment"]},
+      "ui_action": "block_mis_send",
+      "message_ru": "Диагноз или рекомендация не подтверждены объективными данными, выбранным протоколом и врачом."
+    },
+    {
+      "id": "source_conflict",
+      "severity": "warning",
+      "match": {"any_concept": ["contradictory_values", "future_date", "anatomic_mismatch", "duplicate_conflicting_history"]},
+      "ui_action": "show_side_by_side_sources_and_require_resolution",
+      "message_ru": "Обнаружено противоречие. Покажите врачу оба источника и не выбирайте значение автоматически."
+    }
+  ]
+}

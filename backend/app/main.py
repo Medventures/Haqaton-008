@@ -7,7 +7,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from fastapi.responses import FileResponse
+
 from .llm import draft_fields
+from .protocols import DIR as PROTOCOLS_DIR, PROTOCOLS, evaluate_red_flags, reference, retrieve
 from .template_store import TEMPLATES
 
 MIS_URL = os.getenv("MIS_URL", "http://localhost:8001")
@@ -102,13 +105,35 @@ def draft_consultation(req: DraftRequest):
         apt = next((a for a in mis_request("GET", "/api/appointments") if a["id"] == req.appointment_id), None)
         reason = apt["reason"] if apt else None
 
+    excerpts = retrieve(template["specialty"], f"{reason or ''} {req.transcript}")
     try:
-        fields = draft_fields(template, req.transcript, reason)
+        fields, concepts = draft_fields(template, req.transcript, reason, excerpts)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception:
         raise HTTPException(status_code=502, detail="Ошибка обращения к ИИ")
-    return {"fields": fields}
+    return {
+        "fields": fields,
+        "references": [reference(c) for c in excerpts],
+        "red_flags": evaluate_red_flags(concepts),
+    }
+
+
+@app.get("/api/protocols")
+def list_protocols():
+    return [{k: p[k] for k in ("id", "title", "protocol_number", "specialty", "icd10")} for p in PROTOCOLS.values()]
+
+
+@app.get("/api/protocols/{protocol_id}/pdf")
+def protocol_pdf(protocol_id: str):
+    proto = PROTOCOLS.get(protocol_id)
+    if proto is None:
+        raise HTTPException(status_code=404, detail="Протокол не найден")
+    return FileResponse(
+        PROTOCOLS_DIR / "pdf" / proto["file"],
+        media_type="application/pdf",
+        content_disposition_type="inline",
+    )
 
 
 @app.post("/api/consultations/submit")

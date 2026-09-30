@@ -12,6 +12,8 @@ type TemplateInfo = { id: string; specialty: string; title: string };
 type Template = TemplateInfo & { fields: Field[] };
 type Doctor = { name: string; specialty: string; template_id: string };
 type Values = Record<string, string | boolean>;
+type Reference = { protocol_id: string; title: string; number: string; page: number };
+type RedFlag = { id: string; severity: "critical" | "urgent"; message: string };
 type Appointment = {
   id: string;
   time: string;
@@ -60,13 +62,21 @@ export default function App() {
       .then((r) => r.json())
       .then(setTemplate);
     setResult("");
+    setReferences([]);
+    setRedFlags([]);
+    setFlagsAck(false);
   }, [templateId]);
-
-  const set = (name: string, v: string | boolean) => setValues((prev) => ({ ...prev, [name]: v }));
-  const approved = values.doctor_approved === true;
 
   const [drafting, setDrafting] = useState(false);
   const [draftMsg, setDraftMsg] = useState("");
+  const [references, setReferences] = useState<Reference[]>([]);
+  const [redFlags, setRedFlags] = useState<RedFlag[]>([]);
+  const [flagsAck, setFlagsAck] = useState(false);
+
+  const set = (name: string, v: string | boolean) => setValues((prev) => ({ ...prev, [name]: v }));
+  // пока врач не ознакомился с красными флагами, подтвердить форму нельзя
+  const needsAck = redFlags.length > 0 && !flagsAck;
+  const approved = values.doctor_approved === true && !needsAck;
 
   const draft = async () => {
     if (!template) return;
@@ -95,6 +105,9 @@ export default function App() {
         next.doctor_approved = false; // после ИИ врач должен проверить форму заново
         return next;
       });
+      setReferences(body.references ?? []);
+      setRedFlags(body.red_flags ?? []);
+      setFlagsAck(false);
       setDraftMsg("Форма заполнена ИИ. Проверьте и отредактируйте перед подтверждением.");
     } catch {
       setDraftMsg("Ошибка: backend недоступен");
@@ -169,6 +182,38 @@ export default function App() {
           {drafting ? "ИИ заполняет форму..." : "🤖 Заполнить форму по транскрипту"}
         </button>
         {draftMsg && <span style={{ marginLeft: 8 }}>{draftMsg}</span>}
+
+        {redFlags.length > 0 && (
+          <div style={{ marginTop: 10, padding: 10, border: "2px solid #c0392b", background: "#fdecea", borderRadius: 6 }}>
+            <b>⚠ Красные флаги (требуют внимания врача)</b>
+            <ul style={{ margin: "6px 0" }}>
+              {redFlags.map((f) => (
+                <li key={f.id}>
+                  <b>{f.severity === "critical" ? "КРИТИЧНО" : "Срочно"}:</b> {f.message}
+                </li>
+              ))}
+            </ul>
+            <label>
+              <input type="checkbox" checked={flagsAck} onChange={(e) => setFlagsAck(e.target.checked)} /> Я ознакомился(ась)
+              с красными флагами
+            </label>
+          </div>
+        )}
+
+        {references.length > 0 && (
+          <div style={{ marginTop: 10, fontSize: 14 }}>
+            <b>Использованные страницы протоколов МЗ РК:</b>
+            <ul style={{ margin: "4px 0" }}>
+              {references.map((r) => (
+                <li key={`${r.protocol_id}-${r.page}`}>
+                  <a href={`${BACKEND_URL}/api/protocols/${r.protocol_id}/pdf#page=${r.page}`} target="_blank" rel="noreferrer">
+                    {r.title} (протокол №{r.number}), стр. {r.page}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <label>
@@ -203,9 +248,13 @@ export default function App() {
                   <input
                     type="checkbox"
                     checked={values[f.name] === true}
+                    disabled={f.name === "doctor_approved" && needsAck}
                     onChange={(e) => set(f.name, e.target.checked)}
                   />{" "}
                   <b>{f.label}</b>
+                  {f.name === "doctor_approved" && needsAck && (
+                    <small style={{ marginLeft: 8, color: "#c0392b" }}>сначала ознакомьтесь с красными флагами</small>
+                  )}
                 </label>
               ) : (
                 <>
