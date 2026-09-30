@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>МИС — карточка пациента</title>
+<style>
+  :root { --navy:#12305a; --blue:#1d5fd1; --line:#dfe6ee; --bg:#eef2f7; --ink:#13253a; --muted:#67788a; --ok:#1e8e4f; --warn:#c77a00; --ai:#7c5cf0; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Inter, "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--ink); font-size:14px; }
+  header { background:var(--navy); color:#fff; padding:10px 18px; display:flex; align-items:center; gap:10px; font-weight:700; }
+  header small { font-weight:400; opacity:.75; }
+  .live { margin-left:auto; font-weight:400; font-size:12px; opacity:.85; display:flex; align-items:center; gap:6px; }
+  .live i { width:8px; height:8px; border-radius:50%; background:#3ddc84; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity:.3; } }
+  .layout { display:grid; grid-template-columns: 250px minmax(0,1fr); min-height: calc(100vh - 42px); }
+  @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+  aside { background:#fff; border-right:1px solid var(--line); padding:12px 8px; }
+  aside h4 { margin:4px 8px 8px; font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+  .apt { display:block; width:100%; text-align:left; border:0; background:none; padding:9px 10px; border-radius:9px; cursor:pointer; font:inherit; color:inherit; }
+  .apt:hover { background:#f1f5fa; }
+  .apt.sel { background:#e4edfb; }
+  .apt b { display:block; }
+  .apt span { color:var(--muted); font-size:12px; }
+  .badge { float:right; font-size:11px; padding:2px 7px; border-radius:20px; font-weight:600; }
+  .b-not_opened { background:#eef1f4; color:var(--muted); }
+  .b-open { background:#fff3d6; color:var(--warn); }
+  .b-filled { background:#dcf3e5; color:var(--ok); }
+  main { padding:16px 20px 40px; min-width:0; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:14px; }
+  .pt h2 { margin:0 0 2px; font-size:19px; }
+  .pt .m { color:var(--muted); }
+  .status { margin-top:8px; padding:7px 11px; border-radius:8px; font-weight:600; display:inline-block; }
+  .status.not_opened { background:#eef1f4; color:var(--muted); }
+  .status.open { background:#fff3d6; color:var(--warn); }
+  .status.filled { background:#dcf3e5; color:var(--ok); }
+  h3 { margin:0 0 10px; font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+  .cols { display:grid; grid-template-columns: minmax(0,1.5fr) minmax(0,1fr); gap:14px; align-items:start; }
+  @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } }
+  .f { margin-bottom:10px; }
+  .f label { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px; }
+  .f .v { min-height:34px; border:1px solid var(--line); border-radius:8px; padding:7px 10px; background:#fafbfd; white-space:pre-wrap; }
+  .f .v.empty { color:#b3bdc8; background:repeating-linear-gradient(135deg,#fafbfd,#fafbfd 8px,#f4f6f9 8px,#f4f6f9 16px); }
+  .f.ai .v { border-left:3px solid var(--ai); background:#f6f3ff; }
+  .flash { animation: flash 2.4s ease-out; }
+  @keyframes flash { 0% { background:#c8f1d6; box-shadow:0 0 0 3px #c8f1d6; } 100% { box-shadow:0 0 0 0 transparent; } }
+  .bub { border-radius:12px; padding:6px 11px; margin-bottom:7px; max-width:94%; }
+  .bub i { display:block; font-style:normal; font-size:11px; color:var(--muted); font-weight:600; }
+  .bub.doctor { background:#e6f0ff; }
+  .bub.patient { background:#e6f6ec; margin-left:auto; }
+  .none { color:#b3bdc8; text-align:center; padding:26px 6px; border:1px dashed var(--line); border-radius:10px; }
+  .hint { text-align:center; color:var(--muted); padding:70px 20px; }
+</style>
+</head>
+<body>
+<header>МИС <small>карточка пациента · имитация внешней системы</small><span class="live"><i></i>обновляется автоматически</span></header>
+<div class="layout">
+  <aside><h4>Приёмы на сегодня</h4><div id="list"></div></aside>
+  <main id="main"><div class="hint">Загрузка…</div></main>
+</div>
+
+<script>
+const STATUS = { not_opened: "Приём не начат", open: "Ожидает заполнения", filled: "Заполнено" };
+const params = new URLSearchParams(location.search);
+let selected = params.get("apt");
+let prev = {};          // прошлые значения полей, чтобы подсветить вновь заполненные
+let lastSig = "";
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+function pick(list) {
+  if (selected && list.some(e => e.appointment_id === selected)) return selected;
+  const active = list.filter(e => e.status !== "not_opened").sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
+  return (active[0] || list[0]).appointment_id;
+}
+
+function render(list) {
+  const id = pick(list);
+  const sig = JSON.stringify([id, list.map(e => [e.appointment_id, e.status, e.updated_at])]);
+  if (sig === lastSig) return;
+  lastSig = sig;
+
+  document.getElementById("list").innerHTML = list.map(e => `
+    <button class="apt ${e.appointment_id === id ? "sel" : ""}" data-id="${esc(e.appointment_id)}">
+      <span class="badge b-${e.status}">${STATUS[e.status]}</span>
+      <b>${esc(e.time)}</b><span>${esc(e.patient.name)}</span>
+    </button>`).join("");
+  document.querySelectorAll(".apt").forEach(b => b.onclick = () => { selected = b.dataset.id; lastSig = ""; render(list); });
+
+  const e = list.find(x => x.appointment_id === id);
+  const doc = e.document;
+  const fields = doc ? doc.sections.map(s => {
+    const key = id + "|" + s.label, old = prev[key];
+    const changed = e.status === "filled" && s.value && old !== undefined && old !== s.value;
+    const fresh = e.status === "filled" && s.value && old === undefined;
+    prev[key] = s.value;
+    return `<div class="f ${s.ai_suggestion ? "ai" : ""}"><label>${esc(s.label)}</label>
+      <div class="v ${s.value ? "" : "empty"} ${(changed || fresh) ? "flash" : ""}">${s.value ? esc(s.value) : "не заполнено"}</div></div>`;
+  }).join("") : `<div class="none">Форма появится, когда врач начнёт приём</div>`;
+
+  const dialogue = e.dialogue && e.dialogue.length
+    ? e.dialogue.map(t => `<div class="bub ${t.speaker}"><i>${t.speaker === "doctor" ? "Врач" : "Пациент"}</i>${esc(t.text)}</div>`).join("")
+    : `<div class="none">Запись диалога не получена</div>`;
+
+  document.getElementById("main").innerHTML = `
+    <div class="card pt">
+      <h2>${esc(e.patient.name)}</h2>
+      <div class="m">${esc(e.patient.birth_year)} г.р. · приём ${esc(e.time)} · ${esc(e.reason)}</div>
+      <div class="status ${e.status}">${STATUS[e.status]}${e.status === "filled" ? " · получено " + esc(e.received_at) : ""}</div>
+    </div>
+    <div class="cols">
+      <div class="card"><h3>${esc(doc ? doc.title : "Лист консультации")}</h3>${fields}</div>
+      <div class="card"><h3>Запись диалога врач — пациент</h3>${dialogue}</div>
+    </div>`;
+  // запоминаем значения после первого показа, чтобы не мигали повторно
+  if (e.status === "filled") doc.sections.forEach(s => { prev[id + "|" + s.label] = s.value; });
+}
+
+async function tick() {
+  try { render(await (await fetch("/api/encounters")).json()); } catch (err) { /* МИС недоступна — ждём */ }
+}
+tick();
+setInterval(tick, 1200);
+</script>
+</body>
+</html>

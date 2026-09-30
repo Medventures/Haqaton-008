@@ -165,6 +165,30 @@ def protocol_pdf(protocol_id: str):
     )
 
 
+def find_patient(appointment_id: str) -> dict | None:
+    apt = next((a for a in mis_request("GET", "/api/appointments") if a["id"] == appointment_id), None)
+    return apt["patient"] if apt else None
+
+
+class OpenRequest(BaseModel):
+    template_id: str
+    appointment_id: str
+
+
+@app.post("/api/consultations/open")
+def open_consultation(req: OpenRequest):
+    """Врач начал приём: в МИС создаётся пустая карточка консультации."""
+    template = TEMPLATES.get(req.template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Шаблон не найден")
+    document = build_document(template, {}, TEST_DOCTOR, find_patient(req.appointment_id))
+    return mis_request(
+        "PUT",
+        f"/api/encounters/{req.appointment_id}",
+        {"template_id": template["id"], "document": document},
+    )
+
+
 @app.post("/api/consultations/submit")
 def submit_to_mis(submission: Submission):
     template = TEMPLATES.get(submission.template_id)
@@ -173,12 +197,12 @@ def submit_to_mis(submission: Submission):
     if submission.data.get("doctor_approved") is not True:
         raise HTTPException(status_code=403, detail="Отправка в МИС запрещена: форма не подтверждена врачом")
 
+    if not submission.appointment_id:
+        raise HTTPException(status_code=422, detail="Выберите приём: карточка пациента в МИС не определена")
+
     allowed = {f["name"] for f in template["fields"]}
     payload = {k: v for k, v in submission.data.items() if k in allowed}
-    patient = None
-    if submission.appointment_id:
-        apt = next((a for a in mis_request("GET", "/api/appointments") if a["id"] == submission.appointment_id), None)
-        patient = apt["patient"] if apt else None
+    patient = find_patient(submission.appointment_id)
 
     turns = [
         {"speaker": t["speaker"], "text": str(t["text"])}

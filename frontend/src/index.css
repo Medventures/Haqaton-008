@@ -58,6 +58,7 @@ body {
   width: 26px; height: 26px; border-radius: 50%; background: var(--pri); color: #fff;
   display: grid; place-items: center; font-size: 13px; font-weight: 700; flex: none;
 }
+.step.wide { width: auto; padding: 0 9px; border-radius: 13px; }
 .card-head h2 { margin: 0; font-size: 17px; }
 .card-head .hint { margin-left: auto; color: var(--muted); font-size: 13px; }
 

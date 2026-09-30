@@ -84,6 +84,17 @@ export default function App() {
     setSent(null);
   }, [templateId]);
 
+  // Врач начал приём — в МИС создаётся пустая карточка консультации
+  useEffect(() => {
+    if (!appointmentId || !templateId) return;
+    setSent(null);
+    fetch(`${BACKEND_URL}/api/consultations/open`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template_id: templateId, appointment_id: appointmentId }),
+    }).catch(() => {});
+  }, [appointmentId, templateId]);
+
   const set = (name: string, v: string | boolean) => setValues((prev) => ({ ...prev, [name]: v }));
   const appointment = appointments.find((a) => a.id === appointmentId);
   // пока врач не ознакомился с красными флагами, подтвердить форму нельзя
@@ -162,6 +173,34 @@ export default function App() {
   };
 
   const docFields = template?.fields.filter((f) => f.type !== "checkbox") ?? [];
+
+  // Сохранение документа в файл: HTML с расширением .doc открывается в Word
+  const saveDocument = () => {
+    if (!template) return;
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
+    const patient = appointment ? `${appointment.patient.name}, ${appointment.patient.birth_year} г.р.` : "не выбран";
+    const sections = docFields
+      .map((f) => {
+        const v = ((values[f.name] as string) ?? "").trim();
+        return `<p><b>${esc(f.label)}</b><br>${v ? esc(v).replace(/\n/g, "<br>") : "<i>не указано</i>"}</p>`;
+      })
+      .join("");
+    const dialogue = turns
+      .map((t) => `<p><b>${t.speaker === "doctor" ? "Врач" : "Пациент"}:</b> ${esc(t.text)}</p>`)
+      .join("");
+    const html =
+      `<html><head><meta charset="utf-8"><title>Лист консультации</title></head><body style="font-family:Calibri,Arial,sans-serif">` +
+      `<h2>Лист консультации — ${esc(template.title)}</h2>` +
+      `<p>Пациент: ${esc(patient)}<br>Врач: ${esc(doctor?.name ?? "")}<br>Дата: ${new Date().toLocaleDateString("ru-RU")}</p><hr>` +
+      sections +
+      (dialogue ? `<hr><h3>Запись диалога</h3>${dialogue}` : "") +
+      `<hr><p><small>Данные вымышленные. Поля, помеченные как предложение ИИ, вступают в силу после подтверждения врачом.</small></p></body></html>`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿", html], { type: "application/msword" }));
+    a.download = `konsultatsiya_${appointmentId || "bez_priema"}.doc`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   return (
     <>
@@ -286,7 +325,10 @@ export default function App() {
           <section className="card">
             <div className="card-head">
               <span className="step">4</span><h2>Документ консультации</h2>
-              <button type="button" className="btn" style={{ marginLeft: "auto" }} onClick={() => window.print()}>🖨 Печать / PDF</button>
+              <span className="row" style={{ marginLeft: "auto" }}>
+                <button type="button" className="btn" onClick={saveDocument} disabled={!template}>💾 Сохранить документ</button>
+                <button type="button" className="btn" onClick={() => window.print()}>🖨 Печать / PDF</button>
+              </span>
             </div>
             {template && (
               <article className="doc">
@@ -311,10 +353,11 @@ export default function App() {
             )}
           </section>
 
+          <div className="col">
           <section className="card">
             <div className="card-head"><span className="step">5</span><h2>Отправка в МИС</h2></div>
             <p className="muted" style={{ marginTop: 0 }}>
-              В МИС уйдёт то же, что вы видите: запись диалога врач—пациент и подписанный документ.
+              В МИС уйдёт то же, что вы видите: запись диалога врач—пациент и подписанный документ. Карточка ниже заполнится сама.
             </p>
             <label className="row" style={{ marginBottom: 10 }}>
               <input
@@ -326,10 +369,14 @@ export default function App() {
               <b>Я проверил(а) и подтверждаю содержимое формы</b>
             </label>
             {needsAck && <div className="err">Сначала ознакомьтесь с красными флагами.</div>}
-            <button type="button" className="btn btn-primary btn-lg" onClick={submit} disabled={!approved || sending || !turns.length}>
+            <button type="button" className="btn btn-primary btn-lg" onClick={submit} disabled={!approved || sending || !appointmentId}>
               {sending ? "Отправка…" : "Отправить в МИС"}
             </button>
-            {!approved && <span className="muted" style={{ marginLeft: 10 }}>отправка заблокирована, пока врач не подтвердит форму</span>}
+            {!appointmentId ? (
+              <span className="muted" style={{ marginLeft: 10 }}>сначала выберите приём (шаг 1)</span>
+            ) : (
+              !approved && <span className="muted" style={{ marginLeft: 10 }}>отправка заблокирована, пока врач не подтвердит форму</span>
+            )}
             {error && <div className="err">{error}</div>}
 
             {sent && (
@@ -339,10 +386,24 @@ export default function App() {
                 <div style={{ margin: "6px 0" }}>
                   Получено: диалог — {sent.dialogue.length} реплик, документ — {sent.document.sections.length} разделов.
                 </div>
-                <a href={`${MIS_URL}/#${sent.id}`} target="_blank" rel="noreferrer">Открыть запись в МИС ↗</a>
               </div>
             )}
           </section>
+
+          <section className="card">
+            <div className="card-head">
+              <span className="step wide">МИС</span><h2>Карточка пациента в МИС</h2>
+              <a className="hint" href={appointmentId ? `${MIS_URL}/?apt=${appointmentId}` : MIS_URL} target="_blank" rel="noreferrer">
+                открыть в отдельном окне ↗
+              </a>
+            </div>
+            <iframe
+              title="МИС"
+              src={appointmentId ? `${MIS_URL}/?apt=${appointmentId}` : MIS_URL}
+              style={{ width: "100%", height: 620, border: "1px solid var(--line)", borderRadius: 10, background: "#fff" }}
+            />
+          </section>
+          </div>
         </div>
       </div>
     </>
